@@ -143,9 +143,11 @@ async function loadAudit() {
 
 async function loadPartners() {
   if (FB_READY && fb) {
-    const { doc, getDoc } = fb.fsMod;
-    const d = await getDoc(fb.fsMod.doc(fb.db, 'meta', 'partners'));
-    state.partners = d.exists() ? (d.data().emails || []) : [];
+    try {
+      const { doc, getDoc } = fb.fsMod;
+      const d = await getDoc(fb.fsMod.doc(fb.db, 'meta', 'partners'));
+      state.partners = d.exists() ? (d.data().emails || []) : [];
+    } catch (e) { state.partners = []; }
   } else {
     state.partners = JSON.parse(localStorage.getItem('daftar_partners') || '[]');
   }
@@ -233,7 +235,16 @@ async function showApp(user) {
   $('#user-role').textContent = user.role === 'owner' ? 'مدير النظام' : 'شريك — عرض فقط';
   $('#sidebar-email').textContent = user.email || 'وضع محلي';
   await loadPartners();
-  if (FB_READY && fb && state.user.email && state.user.email !== OWNER_EMAIL && state.partners.includes(state.user.email)) {
+  if (FB_READY && fb && state.user.email && state.user.email !== OWNER_EMAIL && !state.partners.includes(state.user.email)) {
+    const { signOut } = fb.authMod;
+    try { await signOut(fb.auth); } catch (e) {}
+    state.user = null;
+    $('#app').classList.add('hidden');
+    $('#login-view').classList.remove('hidden');
+    $('#login-error').textContent = 'هذا الحساب غير مصرح له بالدخول إلى الدفتر';
+    return;
+  }
+  if (FB_READY && fb && state.user.email && state.user.email !== OWNER_EMAIL) {
     state.user.role = 'viewer';
     $('#user-role').textContent = 'شريك — عرض فقط';
   }
