@@ -232,6 +232,8 @@ tbody tr:hover{background:#fafcfe}
 @media (max-width:1024px){
   .cards{grid-template-columns:repeat(2,1fr)}
   .quick{grid-template-columns:repeat(2,1fr)}
+  .cards>.cards{grid-column:1/-1}
+  .stat.cash{grid-column:1/-1}
 }
 @media (max-width:820px){
   .sidebar{display:none}
