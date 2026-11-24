@@ -1,13 +1,10 @@
-// Firebase web app config — to be wired after the Firebase project is created
-// under Ahmed's own Google account (ahmedkamal199714@gmail.com).
-// Until these placeholders are replaced, the app runs in local demo mode
-// (data saved in the browser only).
+// Firebase web app config — project daftar-aldakhl, Ahmed's Google account
 export const firebaseConfig = {
-  apiKey: "REPLACE_WITH_FIREBASE_API_KEY",
-  authDomain: "REPLACE_PROJECT.firebaseapp.com",
-  projectId: "REPLACE_PROJECT_ID",
-  storageBucket: "REPLACE_PROJECT.appspot.com",
-  messagingSenderId: "REPLACE_SENDER_ID",
-  appId: "REPLACE_APP_ID"
+  apiKey: "AIzaSyASIyEelb2OiPtUVgpFGddzILLp5BuSr4Q",
+  authDomain: "daftar-aldakhl.firebaseapp.com",
+  projectId: "daftar-aldakhl",
+  storageBucket: "daftar-aldakhl.firebasestorage.app",
+  messagingSenderId: "483790936014",
+  appId: "1:483790936014:web:2887e8a8bbd9ae9c7e7d9f"
 };
 export const OWNER_EMAIL = "ahmedkamal199714@gmail.com";
