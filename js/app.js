@@ -77,8 +77,9 @@ const localStore = {
 async function loadMovements() {
   if (FB_READY && fb) {
     const { collection, getDocs, query, orderBy } = fb.fsMod;
-    const snap = await getDocs(query(collection(fb.db, 'movements'), orderBy('date'), orderBy('createdAt')));
-    state.movements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const snap = await getDocs(query(collection(fb.db, 'movements'), orderBy('date')));
+    state.movements = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => a.date.localeCompare(b.date) || (a.createdAt||0) - (b.createdAt||0));
   } else {
     state.movements = localStore.read().sort((a,b) => a.date.localeCompare(b.date) || (a.createdAt||0)-(b.createdAt||0));
   }
@@ -208,6 +209,8 @@ const SEED = [
 
 async function runSeed() {
   for (const s of SEED) {
+    const dup = state.movements.some(m => m.date === s.date && m.type === s.type && (m.amount ?? null) === (s.amount ?? null) && (m.note || '') === (s.note || ''));
+    if (dup) continue;
     const d = s.type === 'opening'
       ? { dAhmed: s.dAhmed, dSameh: s.dSameh, dRent: s.dRent, dPriv: s.dPriv }
       : deltasFor(s.type, s.amount, s.bearer);
@@ -567,7 +570,7 @@ function renderAdmin() {
       <div class="cap-row"><span>المبلغ الخاص بسامح</span><b>${fmt(b.priv)} جنيه</b></div>
       <div class="cap-row"><span>النقدية</span><b>${fmt(b.cash)} جنيه</b></div>
     </div>
-    ${isOwner() && state.movements.length === 0 ? `
+    ${isOwner() && !state.movements.some(m => m.type === 'opening') ? `
     <div class="section card">
       <h2>البيانات الأولية</h2>
       <div class="sub">الدفتر فارغ — زرع الأرصدة الافتتاحية وحركات نوفمبر المأخوذة من الدفتر الحالي</div>
