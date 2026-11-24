@@ -300,7 +300,7 @@ function renderHome() {
       <div class="card stat ${b.sameh < 0 ? 'negative' : ''}"><div class="lbl"><div class="dot ${b.sameh<0?'red':'green'}"><svg><use href="#i-user"/></svg></div>سامح</div>
         <div class="val">${fmt(b.sameh)}</div><div class="hint">جنيه ${b.sameh < 0 ? '(عليه)' : ''}</div></div>
       <div class="cards c2" style="grid-template-columns:1fr 1fr;gap:14px;margin:0">
-        <div class="card stat"><div class="lbl"><div class="dot amber"><svg><use href="#i-doc"/></svg></div>الإيجار</div>
+        <div class="card stat"><div class="lbl"><div class="dot amber"><svg><use href="#i-building"/></svg></div>الإيجار</div>
           <div class="val">${fmt(b.rent)}</div><div class="hint">جنيه</div></div>
         <div class="card stat"><div class="lbl"><div class="dot blue"><svg><use href="#i-coin"/></svg></div>الخاص بسامح</div>
           <div class="val">${fmt(b.priv)}</div><div class="hint">جنيه</div></div>
@@ -310,9 +310,9 @@ function renderHome() {
     <div class="section card">
       <h2>إجراءات سريعة</h2><div class="sub">العمليات اليومية المعتادة</div>
       <div class="quick">
-        <button class="qa" data-act="add-transfer"><span class="ic dot green"><svg><use href="#i-swap"/></svg></span><b>إضافة تحويل</b><span>إيجار 130 · سامح 300 · خاص 100 · الباقي أحمد</span></button>
+        <button class="qa" data-act="add-transfer"><span class="ic dot green"><svg><use href="#i-swap"/></svg></span><b>إضافة تحويل</b><span>إيجار 130 · سامح 300 · خاص 100 · قابلة للتعديل</span></button>
         <button class="qa" data-act="add-withdraw"><span class="ic dot red"><svg><use href="#i-down"/></svg></span><b>سحب سامح</b><span>خصم من رصيد سامح</span></button>
-        <button class="qa" data-act="add-rent"><span class="ic dot amber"><svg><use href="#i-doc"/></svg></span><b>دفع إيجار المحل</b><span>خصم من رصيد الإيجار</span></button>
+        <button class="qa" data-act="add-rent"><span class="ic dot amber"><svg><use href="#i-building"/></svg></span><b>دفع إيجار المحل</b><span>خصم من رصيد الإيجار</span></button>
         <button class="qa" data-act="add-expense"><span class="ic dot blue"><svg><use href="#i-up"/></svg></span><b>مصروفات أخرى</b><span>أحمد / سامح / الاثنين بالنصف</span></button>
       </div>
     </div>` : ''}
@@ -472,7 +472,7 @@ function renderReports() {
         <div class="val">${fmt(expenses)}</div><div class="hint">جنيه</div></div>
       <div class="card stat"><div class="lbl"><div class="dot red"><svg><use href="#i-down"/></svg></div>سحوبات سامح</div>
         <div class="val">${fmt(withdrawals)}</div><div class="hint">جنيه</div></div>
-      <div class="card stat"><div class="lbl"><div class="dot amber"><svg><use href="#i-doc"/></svg></div>مدفوعات الإيجار</div>
+      <div class="card stat"><div class="lbl"><div class="dot amber"><svg><use href="#i-building"/></svg></div>مدفوعات الإيجار</div>
         <div class="val">${fmt(rentPaid + privPaid)}</div><div class="hint">إيجار ${fmt(rentPaid)} · خاص ${fmt(privPaid)}</div></div>
     </div>
     <div class="section card">
@@ -608,7 +608,13 @@ function openMovementModal(kind, existing) {
           <button data-v="ahmed" class="${(m.person||'ahmed')==='ahmed'?'active':''}">أحمد</button>
           <button data-v="sameh" class="${m.person==='sameh'?'active':''}">سامح</button></div></div>` : ''}
         <div class="field"><label>البيان / ملاحظة</label><input type="text" id="f-note" value="${esc(m.note || '')}" placeholder="${type==='transfer'?'تحويل سامح يوم …':''}"></div>
-        ${type === 'transfer' ? `<div class="split-preview" id="split-preview"></div>` : ''}
+        ${type === 'transfer' ? `<div class="field" style="margin-bottom:10px"><label>توزيع المبلغ — عدّل أي خانة براحتك</label><div class="split-grid">
+          <div><label>دخل سامح</label><input type="number" id="f-ss" min="0" step="any" value="${existing ? (m.dSameh ?? SPLIT.sameh) : SPLIT.sameh}"></div>
+          <div><label>الإيجار</label><input type="number" id="f-sr" min="0" step="any" value="${existing ? (m.dRent ?? SPLIT.rent) : SPLIT.rent}"></div>
+          <div><label>المبلغ الخاص بسامح</label><input type="number" id="f-sp" min="0" step="any" value="${existing ? (m.dPriv ?? SPLIT.priv) : SPLIT.priv}"></div>
+          <div><label>دخل أحمد</label><input type="number" id="f-sa" step="any" value="${existing ? (m.dAhmed ?? '') : ''}"></div>
+        </div></div>
+        <div class="split-preview" id="split-preview"></div>` : ''}
         ${t.needsBearer ? `<div class="split-preview" id="split-preview"></div>` : ''}
       </div>
       <div class="modal-foot">
@@ -625,30 +631,48 @@ function openMovementModal(kind, existing) {
   bindSeg('#f-captype', v => curType = v);
   bindSeg('#f-bearer', v => curBearer = v);
   bindSeg('#f-person', v => curPerson = v);
+  const splitVals = () => ({
+    ss: Number($('#f-ss')?.value) || 0, sr: Number($('#f-sr')?.value) || 0,
+    sp: Number($('#f-sp')?.value) || 0, sa: Number($('#f-sa')?.value) || 0 });
+  let saManual = false;
+  const autoAhmed = () => { if (curType !== 'transfer' || !$('#f-sa')) return;
+    const a = Number($('#f-amount').value) || 0; const v = splitVals();
+    $('#f-sa').value = a - v.ss - v.sr - v.sp; };
   const preview = () => {
     const el = $('#split-preview'); if (!el) return;
     const a = Number($('#f-amount').value) || 0;
     if (curType === 'transfer') {
-      const d = deltasFor('transfer', a);
-      el.innerHTML = `<div class="rowline"><span>سامح</span><b>${fmt(SPLIT.sameh)}</b></div>
-        <div class="rowline"><span>الإيجار</span><b>${fmt(SPLIT.rent)}</b></div>
-        <div class="rowline"><span>الخاص بسامح</span><b>${fmt(SPLIT.priv)}</b></div>
-        <div class="rowline"><span>أحمد (الباقي)</span><b>${fmt(d.dAhmed)}</b></div>`;
+      const v = splitVals();
+      const sum = v.sa + v.ss + v.sr + v.sp;
+      el.innerHTML = (a > 0 && sum === a)
+        ? `<div class="rowline ok"><span>✓ التوزيع مطابق لمبلغ التحويل</span><b>${fmt(sum)}</b></div>`
+        : `<div class="rowline bad"><span>المجموع لا يساوي مبلغ التحويل</span><b>${fmt(sum)} ≠ ${fmt(a)}</b></div>`;
     } else if (TYPES[curType]?.needsBearer) {
       const d = deltasFor('expense', a, curBearer);
       el.innerHTML = `<div class="rowline"><span>يخصم من أحمد</span><b>${fmt(-d.dAhmed)}</b></div>
         <div class="rowline"><span>يخصم من سامح</span><b>${fmt(-d.dSameh)}</b></div>`;
     }
   };
-  $('#f-amount').oninput = preview; preview();
+  $('#f-amount').oninput = () => { saManual = false; autoAhmed(); preview(); };
+  ['#f-ss','#f-sr','#f-sp'].forEach(id => { const el = $(id); if (el) el.oninput = () => { saManual = false; autoAhmed(); preview(); }; });
+  const fSa = $('#f-sa'); if (fSa) fSa.oninput = () => { saManual = true; preview(); };
+  if (!existing) autoAhmed();
+  preview();
   $('#mov-save').onclick = async () => {
     const amount = Number($('#f-amount').value);
     if (!amount || amount <= 0) { toast('أدخل مبلغاً صحيحاً', 'error'); return; }
+    let deltas;
+    if (curType === 'transfer') {
+      const v = splitVals();
+      const sum = v.sa + v.ss + v.sr + v.sp;
+      if (sum !== amount) { toast(`مجموع التوزيع (${fmt(sum)}) لا يساوي مبلغ التحويل (${fmt(amount)})`, 'error'); return; }
+      deltas = { dAhmed: v.sa, dSameh: v.ss, dRent: v.sr, dPriv: v.sp };
+    } else deltas = deltasFor(curType, amount, curBearer);
     const data = {
       date: $('#f-date').value || todayISO(), type: curType, label: TYPES[curType].label,
       amount, note: $('#f-note').value.trim(), bearer: curType === 'expense' ? curBearer : null,
       person: curType.startsWith('capital') ? curPerson : null,
-      ...deltasFor(curType, amount, curBearer)
+      ...deltas
     };
     if (existing) Object.assign(existing, data); 
     await saveMovement(existing || data, !existing);
