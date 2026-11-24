@@ -310,7 +310,7 @@ function renderHome() {
     <div class="section card">
       <h2>إجراءات سريعة</h2><div class="sub">العمليات اليومية المعتادة</div>
       <div class="quick">
-        <button class="qa" data-act="add-transfer"><span class="ic dot green"><svg><use href="#i-swap"/></svg></span><b>إضافة تحويل</b><span>إيجار 130 · سامح 300 · خاص 100 · قابلة للتعديل</span></button>
+        <button class="qa" data-act="add-transfer"><span class="ic dot green"><svg><use href="#i-swap"/></svg></span><b>إضافة تحويل</b><span>توزيع مرن: سامح · إيجار · خاص · أحمد</span></button>
         <button class="qa" data-act="add-withdraw"><span class="ic dot red"><svg><use href="#i-down"/></svg></span><b>سحب سامح</b><span>خصم من رصيد سامح</span></button>
         <button class="qa" data-act="add-rent"><span class="ic dot amber"><svg><use href="#i-building"/></svg></span><b>دفع إيجار المحل</b><span>خصم من رصيد الإيجار</span></button>
         <button class="qa" data-act="add-expense"><span class="ic dot blue"><svg><use href="#i-up"/></svg></span><b>مصروفات أخرى</b><span>أحمد / سامح / الاثنين بالنصف</span></button>
@@ -609,10 +609,10 @@ function openMovementModal(kind, existing) {
           <button data-v="sameh" class="${m.person==='sameh'?'active':''}">سامح</button></div></div>` : ''}
         <div class="field"><label>البيان / ملاحظة</label><input type="text" id="f-note" value="${esc(m.note || '')}" placeholder="${type==='transfer'?'تحويل سامح يوم …':''}"></div>
         ${type === 'transfer' ? `<div class="field" style="margin-bottom:10px"><label>توزيع المبلغ — عدّل أي خانة براحتك</label><div class="split-grid">
-          <div><label>دخل سامح</label><input type="number" id="f-ss" min="0" step="any" value="${existing ? (m.dSameh ?? SPLIT.sameh) : SPLIT.sameh}"></div>
-          <div><label>الإيجار</label><input type="number" id="f-sr" min="0" step="any" value="${existing ? (m.dRent ?? SPLIT.rent) : SPLIT.rent}"></div>
-          <div><label>المبلغ الخاص بسامح</label><input type="number" id="f-sp" min="0" step="any" value="${existing ? (m.dPriv ?? SPLIT.priv) : SPLIT.priv}"></div>
-          <div><label>دخل أحمد</label><input type="number" id="f-sa" step="any" value="${existing ? (m.dAhmed ?? '') : ''}"></div>
+          <div><label>دخل سامح</label><input type="number" id="f-ss" min="0" step="any" placeholder="0" value="${existing ? (m.dSameh ?? '') : ''}"></div>
+          <div><label>الإيجار</label><input type="number" id="f-sr" min="0" step="any" placeholder="0" value="${existing ? (m.dRent ?? '') : ''}"></div>
+          <div><label>المبلغ الخاص بسامح</label><input type="number" id="f-sp" min="0" step="any" placeholder="0" value="${existing ? (m.dPriv ?? '') : ''}"></div>
+          <div><label>دخل أحمد</label><input type="number" id="f-sa" step="any" placeholder="0" value="${existing ? (m.dAhmed ?? '') : ''}"></div>
         </div></div>
         <div class="split-preview" id="split-preview"></div>` : ''}
         ${t.needsBearer ? `<div class="split-preview" id="split-preview"></div>` : ''}
