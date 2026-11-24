@@ -60,6 +60,7 @@ function toast(msg, kind='') {
 const state = {
   user: null,          // { email, name, role: 'owner'|'viewer' }
   movements: [],       // sorted by date asc then createdAt
+  wallet: [],          // wallet entries: { id, date, kind: 'in'|'out', amount, note, createdAt }
   partners: [],        // emails with view access
   loaded: false
 };
@@ -73,6 +74,55 @@ const localStore = {
   read() { try { return JSON.parse(localStorage.getItem('daftar_movements') || '[]'); } catch { return []; } },
   write(rows) { localStorage.setItem('daftar_movements', JSON.stringify(rows)); }
 };
+const walletStore = {
+  read() { try { return JSON.parse(localStorage.getItem('daftar_wallet') || '[]'); } catch { return []; } },
+  write(rows) { localStorage.setItem('daftar_wallet', JSON.stringify(rows)); }
+};
+
+/* Wallet entry: { id, date, kind: 'in'|'out', amount, note, createdAt, createdBy, updatedAt } */
+async function loadWallet() {
+  if (FB_READY && fb) {
+    const { collection, getDocs, query, orderBy } = fb.fsMod;
+    const snap = await getDocs(query(collection(fb.db, 'wallet'), orderBy('date')));
+    state.wallet = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => a.date.localeCompare(b.date) || (a.createdAt||0) - (b.createdAt||0));
+  } else {
+    state.wallet = walletStore.read().sort((a,b) => a.date.localeCompare(b.date) || (a.createdAt||0)-(b.createdAt||0));
+  }
+}
+
+async function saveWallet(w, isNew) {
+  w.updatedAt = Date.now();
+  if (FB_READY && fb) {
+    const { collection, doc, setDoc, addDoc } = fb.fsMod;
+    if (isNew) {
+      w.createdAt = Date.now();
+      w.createdBy = state.user?.email || '';
+      const ref = await addDoc(collection(fb.db, 'wallet'), w);
+      w.id = ref.id;
+    } else {
+      const { id, ...data } = w;
+      await setDoc(doc(fb.db, 'wallet', id), data);
+    }
+  } else {
+    if (isNew) { w.id = uid(); w.createdAt = Date.now(); }
+    const rows = walletStore.read().filter(r => r.id !== w.id);
+    rows.push(w); walletStore.write(rows);
+  }
+  await audit(isNew ? 'إضافة' : 'تعديل', `محفظة ${w.kind === 'in' ? 'داخل' : 'خارج'} — ${fmt(w.amount)} — ${w.date}`);
+  await loadWallet();
+}
+
+async function removeWallet(w) {
+  if (FB_READY && fb) {
+    const { doc, deleteDoc } = fb.fsMod;
+    await deleteDoc(doc(fb.db, 'wallet', w.id));
+  } else {
+    walletStore.write(walletStore.read().filter(r => r.id !== w.id));
+  }
+  await audit('حذف', `محفظة ${w.kind === 'in' ? 'داخل' : 'خارج'} — ${fmt(w.amount)} — ${w.date}`);
+  await loadWallet();
+}
 
 async function loadMovements() {
   if (FB_READY && fb) {
@@ -249,6 +299,7 @@ async function showApp(user) {
     $('#user-role').textContent = 'شريك — عرض فقط';
   }
   await loadMovements();
+  try { await loadWallet(); } catch (e) { state.wallet = []; }
   route();
 }
 
@@ -283,12 +334,12 @@ function initAuth() {
 
 /* ---------- router ---------- */
 const ROUTES = { '': 'home', '/': 'home', '/movements': 'movements', '/statement': 'statement',
-  '/reports': 'reports', '/capital': 'capital', '/audit': 'audit', '/admin': 'admin' };
+  '/reports': 'reports', '/capital': 'capital', '/wallet': 'wallet', '/audit': 'audit', '/admin': 'admin' };
 function route() {
   const page = ROUTES[location.hash.replace('#', '')] ?? 'home';
   $$('#side-nav a, #bottom-nav a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
   ({ home: renderHome, movements: renderMovements, statement: renderStatement,
-     reports: renderReports, capital: renderCapital, audit: renderAudit, admin: renderAdmin })[page]();
+     reports: renderReports, capital: renderCapital, wallet: renderWallet, audit: renderAudit, admin: renderAdmin })[page]();
   $('#page').scrollTop = 0; window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', route);
@@ -591,6 +642,83 @@ function renderAdmin() {
   if (rf) rf.onchange = restoreJSON;
 }
 
+/* ---------- wallet (المحفظة) ---------- */
+function renderWallet() {
+  const asc = [...state.wallet].sort((a,b) => a.date.localeCompare(b.date) || (a.createdAt||0)-(a.createdAt||0));
+  let run = 0;
+  const withBal = asc.map(w => { const d = w.kind === 'in' ? w.amount : -w.amount; run += d; return { ...w, d, bal: run }; });
+  const rows = [...withBal].reverse();
+  const bal = run;
+  const totIn = asc.filter(w => w.kind === 'in').reduce((s,w) => s + w.amount, 0);
+  const totOut = asc.filter(w => w.kind === 'out').reduce((s,w) => s + w.amount, 0);
+  $('#page').innerHTML = `
+    <div class="page-head">
+      <div><h1>المحفظة</h1><div class="sub">متابعة رصيد محفظة اتصالات كاش / إنستا باي — اللي داخل واللي اتصرف والباقي</div></div>
+      <div class="actions">${isOwner() ? `
+        <button class="btn btn-ghost" data-act="wallet-out"><svg><use href="#i-up"/></svg>صرف من المحفظة</button>
+        <button class="btn btn-green" data-act="wallet-in"><svg><use href="#i-plus"/></svg>إيداع في المحفظة</button>` : ''}</div>
+    </div>
+    <div class="cards c3">
+      <div class="card stat cash"><div class="lbl"><svg><use href="#i-wallet"/></svg>الرصيد الحالي</div>
+        <div class="val" ${bal<0?'style="color:var(--red)"':''}>${fmt(bal)} <small>جنيه</small></div>
+        <div class="hint">الباقي في المحفظة بعد كل الحركات</div></div>
+      <div class="card stat"><div class="lbl">إجمالي داخل</div><div class="val" style="color:var(--green)">${fmt(totIn)}</div><div class="hint">جنيه — كل اللي اتحوّل للمحفظة</div></div>
+      <div class="card stat"><div class="lbl">إجمالي خارج</div><div class="val" style="color:var(--red)">${fmt(totOut)}</div><div class="hint">جنيه — كل اللي اتصرف منها</div></div>
+    </div>
+    <div class="section card">
+      <div class="section-head"><h2>حركات المحفظة</h2></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>التاريخ</th><th>البيان</th><th>النوع</th><th>داخل</th><th>خارج</th><th>الرصيد</th>${isOwner()?'<th></th>':''}</tr></thead>
+        <tbody>${rows.map(w => `<tr>
+          <td class="muted" style="white-space:nowrap">${fmtDate(w.date)}</td>
+          <td>${esc(w.note) || (w.kind === 'in' ? 'إيداع' : 'صرف')}</td>
+          <td><span class="badge ${w.kind === 'in' ? 'green' : 'red'}">${w.kind === 'in' ? 'داخل' : 'خارج'}</span></td>
+          <td class="num pos">${w.kind === 'in' ? fmt(w.amount) : '—'}</td>
+          <td class="num neg">${w.kind === 'out' ? fmt(w.amount) : '—'}</td>
+          <td class="num" ${w.bal<0?'style="color:var(--red)"':''}>${fmt(w.bal)}</td>
+          ${isOwner() ? `<td><div class="row-actions">
+            <button class="iconbtn" data-wedit="${w.id}" title="تعديل"><svg width="14" height="14"><use href="#i-edit"/></svg></button>
+            <button class="iconbtn" data-wdel="${w.id}" title="حذف"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+          </div></td>` : ''}</tr>`).join('') || '<tr><td colspan="7" class="empty">لا توجد حركات بعد — سجّل أول إيداع في المحفظة</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function openWalletModal(kind, existing) {
+  const w = existing || { date: todayISO(), kind: kind || 'in', amount: '', note: '' };
+  $('#modal-root').innerHTML = `
+    <div class="modal-overlay" id="wal-overlay"><div class="modal">
+      <div class="modal-head"><h3>${existing ? 'تعديل حركة محفظة' : (w.kind === 'in' ? 'إيداع في المحفظة' : 'صرف من المحفظة')}</h3>
+        <button class="iconbtn" id="wal-close"><svg width="15" height="15"><use href="#i-x"/></svg></button></div>
+      <div class="modal-body">
+        <div class="field"><label>النوع</label><div class="seg" id="f-wkind">
+          <button data-v="in" class="${w.kind==='in'?'active':''}">داخل (إيداع)</button>
+          <button data-v="out" class="${w.kind==='out'?'active':''}">خارج (صرف)</button></div></div>
+        <div class="field"><label>التاريخ</label><input type="date" id="f-wdate" value="${w.date}"></div>
+        <div class="field"><label>المبلغ (جنيه)</label><input type="number" id="f-wamount" min="0" step="any" value="${w.amount ?? ''}" placeholder="0"></div>
+        <div class="field"><label>البيان / ملاحظة</label><input type="text" id="f-wnote" value="${esc(w.note || '')}" placeholder="مثال: تحويل من إنستا باي"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-green" id="wal-save">${existing ? 'حفظ التعديل' : 'إضافة'}</button>
+        <button class="btn btn-ghost" id="wal-cancel">إلغاء</button>
+      </div>
+    </div></div>`;
+  let curKind = w.kind;
+  const close = () => $('#modal-root').innerHTML = '';
+  $('#wal-close').onclick = close; $('#wal-cancel').onclick = close;
+  $('#wal-overlay').onclick = e => { if (e.target.id === 'wal-overlay') close(); };
+  const seg = $('#f-wkind');
+  [...seg.children].forEach(b => b.onclick = () => { [...seg.children].forEach(x => x.classList.remove('active')); b.classList.add('active'); curKind = b.dataset.v; });
+  $('#wal-save').onclick = async () => {
+    const amount = Number($('#f-wamount').value);
+    if (!amount || amount <= 0) { toast('أدخل مبلغاً صحيحاً', 'error'); return; }
+    const data = { date: $('#f-wdate').value || todayISO(), kind: curKind, amount, note: $('#f-wnote').value.trim() };
+    if (existing) Object.assign(existing, data);
+    await saveWallet(existing || data, !existing);
+    close(); toast(existing ? 'تم حفظ التعديل' : 'تمت الإضافة', 'success'); route();
+  };
+}
+
 /* ---------- movement modal ---------- */
 function openMovementModal(kind, existing) {
   const presets = {
@@ -721,7 +849,7 @@ async function exportXlsx() {
   toast('تم تنزيل ملف Excel', 'success');
 }
 function backupJSON() {
-  const blob = new Blob([JSON.stringify({ movements: state.movements, partners: state.partners }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ movements: state.movements, wallet: state.wallet, partners: state.partners }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `نسخة-احتياطية-دفتر-الدخل-${todayISO()}.json`;
@@ -738,6 +866,10 @@ async function restoreJSON(e) {
       const { id, ...rest } = m;
       await saveMovement(rest, true);
     }
+    for (const w of (Array.isArray(data.wallet) ? data.wallet : [])) {
+      const { id, ...rest } = w;
+      await saveWallet(rest, true);
+    }
     toast('تمت الاستعادة', 'success'); route();
   } catch { toast('ملف غير صالح', 'error'); }
 }
@@ -747,6 +879,8 @@ document.addEventListener('click', async e => {
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act) {
     if (['add-transfer','add-withdraw','add-rent','add-expense','add-capital'].includes(act)) openMovementModal(act);
+    else if (act === 'wallet-in') openWalletModal('in');
+    else if (act === 'wallet-out') openWalletModal('out');
     else if (act === 'export-xlsx') exportXlsx();
     else if (act === 'backup-json') backupJSON();
     else if (act === 'print') window.print();
@@ -773,6 +907,16 @@ document.addEventListener('click', async e => {
     const m = state.movements.find(x => x.id === delId);
     if (m && confirm(`حذف: ${m.label || TYPES[m.type].label} بمبلغ ${fmt(m.amount)}؟`)) {
       await removeMovement(m); toast('تم الحذف', 'success'); route();
+    }
+    return;
+  }
+  const weditId = e.target.closest('[data-wedit]')?.dataset.wedit;
+  if (weditId) { const w = state.wallet.find(x => x.id === weditId); if (w) openWalletModal(null, w); return; }
+  const wdelId = e.target.closest('[data-wdel]')?.dataset.wdel;
+  if (wdelId) {
+    const w = state.wallet.find(x => x.id === wdelId);
+    if (w && confirm(`حذف حركة المحفظة بمبلغ ${fmt(w.amount)}؟`)) {
+      await removeWallet(w); toast('تم الحذف', 'success'); route();
     }
   }
 });
