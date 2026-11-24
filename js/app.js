@@ -692,7 +692,20 @@ function openMovementModal(kind, existing) {
 }
 
 /* ---------- export / print / backup ---------- */
-function exportXlsx() {
+let xlsxReady = null;
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  if (!xlsxReady) xlsxReady = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    s.onload = res; s.onerror = () => { xlsxReady = null; rej(new Error('xlsx failed')); };
+    document.head.appendChild(s);
+  });
+  return xlsxReady;
+}
+async function exportXlsx() {
+  toast('جاري تجهيز ملف Excel…');
+  try { await loadXlsx(); } catch (e) { toast('تعذر تحميل مكتبة Excel، حاول مرة أخرى', 'error'); return; }
   const wb = XLSX.utils.book_new();
   const b = balances();
   const rows = [...state.movements].reverse().map(m => ({
